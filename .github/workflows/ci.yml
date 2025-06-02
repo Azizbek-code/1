@@ -1,5 +1,4 @@
-
-name: Deploy to EC2
+name: Deploy to Server
 
 on:
   push:
@@ -9,32 +8,17 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Create .env file from secrets
+      - name: Deploy to server
+        env:
+          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SERVER_ HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
         run: |
-          echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" >> .env
-          echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> .env
-          # qo‘shimcha secretlar ham shu yerga yoziladi
-
-      - name: Create private key
-        run: |
-          echo "${{ secrets.EC2_SSH_KEY }}" > ec2-key.pem
-          chmod 600 ec2-key.pem
-
-      - name: Upload files to EC2
-        run: |
-          scp -i ec2-key.pem -o StrictHostKeyChecking=no -r . ubuntu@${{ secrets.EC2_HOST }}:/home/ubuntu/app
-
-      - name: SSH into EC2 and build Docker
-        run: |
-          ssh -i ec2-key.pem -o StrictHostKeyChecking=no ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} << 'EOF'
-            cd /home/ubuntu/app
-            docker build -t my-nest-app .
-            docker stop my-nest-app || true
-            docker rm my-nest-app || true
-            docker run -d --name my-nest-app --env-file .env -p 3000:3000 my-nest-app
-          EOF
+          echo "$SSH_KEY" > key.pem 
+          chmod 600 key.pem
+          ssh -i key.pem -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST '
+          cd /home/ubuntu/app 
+          git pull origin main 
+          sudo docker-compose down
+          sudo docker-compose up --build -d'
